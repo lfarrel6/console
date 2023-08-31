@@ -880,6 +880,91 @@ impl fmt::Debug for ConsoleLayer {
     }
 }
 
+
+#[cfg(feature = "vsock")]
+mod vsock_incoming {
+  use tokio_vsock::{VsockListener, VsockStream, SockAddr};
+
+  pub(super) struct VsockIncoming(VsockListener);
+  impl VsockIncoming {
+    
+    pub fn new(listener: VsockListener) -> Self {
+      Self(listener)
+    }
+  }
+
+  impl futures_core::stream::Stream for VsockIncoming {
+    type Item = Result<WrappedVsockStream,std::io::Error>;
+
+    fn poll_next(
+      self: std::pin::Pin<&mut Self>,
+      cx: &mut std::task::Context<'_>
+    ) -> std::task::Poll<Option<Self::Item>> {
+      let this = self.get_mut();
+      match this.0.poll_accept(cx) {
+        std::task::Poll::Ready(Ok(connection)) => std::task::Poll::Ready(Some(Ok(connection.into()))),
+        std::task::Poll::Ready(Err(e)) => std::task::Poll::Ready(Some(Err(e))),
+        std::task::Poll::Pending => std::task::Poll::Pending
+      }
+    }
+  }
+  
+  use pin_project::pin_project;
+  #[pin_project]
+  pub(super) struct WrappedVsockStream {
+    #[pin]
+    inner: VsockStream,
+    addr: tokio_vsock::SockAddr
+  }
+
+  impl tokio::io::AsyncRead for WrappedVsockStream {
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut futures_task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> futures_task::Poll<std::io::Result<()>> {
+        self.project().inner.poll_read(cx, buf)
+    }
+  }
+
+  impl tokio::io::AsyncWrite for WrappedVsockStream {
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut futures_task::Context<'_>,
+        buf: &[u8],
+    ) -> futures_task::Poll<Result<usize, std::io::Error>> {
+        self.project().inner.poll_write(cx, buf)
+    }
+
+    fn poll_flush(self: std::pin::Pin<&mut Self>, cx: &mut futures_task::Context<'_>) -> futures_task::Poll<Result<(), std::io::Error>> {
+        self.project().inner.poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: std::pin::Pin<&mut Self>, cx: &mut futures_task::Context<'_>) -> futures_task::Poll<Result<(), std::io::Error>> {
+        self.project().inner.poll_shutdown(cx)
+    }
+  }
+
+  impl tonic::transport::server::Connected for WrappedVsockStream {
+    type ConnectInfo = tokio_vsock::SockAddr;
+
+    fn connect_info(&self) -> Self::ConnectInfo {
+        self.addr.clone()
+    }
+  }
+
+  impl std::convert::From<(VsockStream, SockAddr)> for WrappedVsockStream {
+    fn from(value: (VsockStream, SockAddr)) -> Self {
+        Self {
+          inner: value.0,
+          addr: value.1
+        }
+    }
+}
+
+}
+
+
 impl Server {
     // XXX(eliza): why is `SocketAddr::new` not `const`???
     /// A [`Server`] by default binds socket address 127.0.0.1 to service remote
@@ -956,6 +1041,17 @@ impl Server {
                 let incoming = UnixListener::bind(path)?;
                 let serve = router.serve_with_incoming(UnixListenerStream::new(incoming));
                 spawn_named(serve, "console::serve").await
+            }
+            #[cfg(feature = "vsock")]
+            ServerAddr::VSock {
+              cid,
+              port
+            } => {
+              use tokio_vsock::VsockListener;
+              use vsock_incoming::*;
+              let incoming = VsockListener::bind(cid, port).unwrap();
+              let serve = router.serve_with_incoming(VsockIncoming::new(incoming));
+              spawn_named(serve, "console::serve").await
             }
         };
         aggregate.abort();

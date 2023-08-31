@@ -25,9 +25,10 @@ keywords = [
 ]
 
 [features]
-default = ["env-filter"]
+default = ["env-filter","vsock"]
 parking_lot = ["parking_lot_crate", "tracing-subscriber/parking_lot"]
 env-filter = ["tracing-subscriber/env-filter"]
+vsock = ["dep:tokio-vsock", "dep:futures-core","dep:pin-project"]
 
 [dependencies]
 
@@ -47,6 +48,10 @@ hdrhistogram = { version = "7.3.0", default-features = false, features = ["seria
 parking_lot_crate = { package = "parking_lot", version = "0.12", optional = true }
 humantime = "2.1.0"
 prost-types = "0.11.0"
+
+tokio-vsock = { version = "0.3.2", optional = true }
+futures-core = { version = "0.3.28", optional = true }
+pin-project = { version = "1", optional = true }
 
 # Required for recording:
 serde = { version = "1", features = ["derive"] }

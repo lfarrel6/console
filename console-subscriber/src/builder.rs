@@ -532,6 +532,11 @@ pub enum ServerAddr {
     /// A Unix socket address.
     #[cfg(unix)]
     Unix(PathBuf),
+    #[cfg(feature="vsock")]
+    VSock {
+      cid: u32, 
+      port: u32 
+    }
 }
 
 impl From<SocketAddr> for ServerAddr {
@@ -558,6 +563,17 @@ where
 {
     fn from(pieces: (I, u16)) -> ServerAddr {
         ServerAddr::Tcp(pieces.into())
+    }
+}
+
+
+#[cfg(feature = "vsock")]
+impl From<(u32, u32)> for ServerAddr {
+    fn from(vsock_addr: (u32, u32)) -> ServerAddr {
+        ServerAddr::VSock {
+          cid: vsock_addr.0,
+          port: vsock_addr.1
+        }
     }
 }
 
