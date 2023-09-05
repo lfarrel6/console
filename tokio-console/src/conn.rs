@@ -103,13 +103,8 @@ impl Connection {
                     Some("vsock") => {
                       // following the same pattern as the unix connector above
                       let endpoint = Endpoint::from_static("http://localhost");
-                      // if !matches!(self.target.host(), None | Some("localhost")) {
-                        // return Err("cannot connect to non-localhost unix domain socket".into());
-                      // }
-                      println!("Connecting to target: {:?}", self.target);
                       let tokens = self.target.authority().unwrap().as_str().split(':');
                       let vsock_tokens: Vec<u32> = tokens.map(|token| token.parse::<u32>().unwrap()).collect();
-                      println!("Connecting to console over vsock. CID: {} PORT: {}", vsock_tokens[0], vsock_tokens[1]);
                       endpoint.connect_with_connector(tower::service_fn(move |_| {
                         VsockStream::connect(vsock_tokens[0], vsock_tokens[1])
                       })).await?
