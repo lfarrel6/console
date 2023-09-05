@@ -4,6 +4,7 @@ use console_api::instrument::{
 };
 use console_api::tasks::TaskDetails;
 use futures::stream::StreamExt;
+use tokio_vsock::VsockStream;
 use std::{error::Error, pin::Pin, time::Duration};
 #[cfg(unix)]
 use tokio::net::UnixStream;
@@ -97,6 +98,19 @@ impl Connection {
                                 UnixStream::connect(path.clone())
                             }))
                             .await?
+                    }
+                    #[cfg(feature = "vsock")]
+                    Some("vsock") => {
+                      // following the same pattern as the unix connector above
+                      let endpoint = Endpoint::from_static("http://localhost");
+                      if !matches!(self.target.host(), None | Some("localhost")) {
+                        return Err("cannot connect to non-localhost unix domain socket".into());
+                      }
+                      let tokens = self.target.authority().unwrap().as_str().split(':');
+                      let vsock_tokens: Vec<u32> = tokens.map(|token| token.parse::<u32>().unwrap()).collect();
+                      endpoint.connect_with_connector(tower::service_fn(move |_| {
+                        VsockStream::connect(vsock_tokens[0], vsock_tokens[1])
+                      })).await?
                     }
                     #[cfg(not(unix))]
                     Some("file") => {

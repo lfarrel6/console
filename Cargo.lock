@@ -1455,6 +1455,7 @@ dependencies = [
  "regex",
  "serde",
  "tokio",
+ "tokio-vsock",
  "toml",
  "tonic",
  "tower",

@@ -50,3 +50,8 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.5"
 dirs = "4"
 clap_complete = "3"
+tokio-vsock = { version = "0.3", optional = true }
+
+[features]
+default = ["vsock"]
+vsock = ["dep:tokio-vsock"]
